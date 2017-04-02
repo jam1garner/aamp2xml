@@ -32,10 +32,10 @@ namespace AAMP2XML
                 Boolean = 0x0,
                 Float = 0x1,
                 Int = 0x2,
-                FloatPair = 0x3,
-                FloatTriple = 0x4,
+                Vector2 = 0x3,
+                Vector3 = 0x4,
 
-                FloatQuad = 0x6,
+                Vector4 = 0x6,
                 String = 0x7
             }
 
@@ -81,13 +81,13 @@ namespace AAMP2XML
                         case type.Boolean:
                             Value = (f.readByte() != 0);
                             break;
-                        case type.FloatPair:
+                        case type.Vector2:
                             Value = new float[2] { f.readFloat(), f.readFloat() };
                             break;
-                        case type.FloatTriple:
+                        case type.Vector3:
                             Value = new float[3] { f.readFloat(), f.readFloat(), f.readFloat() };
                             break;
-                        case type.FloatQuad:
+                        case type.Vector4:
                             Value = new float[4] { f.readFloat(), f.readFloat(), f.readFloat(), f.readFloat() };
                             break;
                     }
@@ -118,14 +118,17 @@ namespace AAMP2XML
                             if ((bool)Value)
                                 value = "1";
                             break;
-                        case type.FloatPair:
+                        case type.Vector2:
                             value = $"{((float[])Value)[0]} {((float[])Value)[1]}";
                             break;
-                        case type.FloatTriple:
+                        case type.Vector3:
                             value = $"{((float[])Value)[0]} {((float[])Value)[1]} {((float[])Value)[2]}";
                             break;
-                        case type.FloatQuad:
+                        case type.Vector4:
                             value = $"{((float[])Value)[0]} {((float[])Value)[1]} {((float[])Value)[2]} {((float[])Value)[3]}";
+                            break;
+                        default:
+                            value = "Offset 0x"+ValueOffset.ToString("X");
                             break;
                     }
                     node.InnerText = value;
@@ -138,6 +141,58 @@ namespace AAMP2XML
                     }
                 }
                 return node;
+            }
+
+            public void fromXmlNode(XmlNode node)
+            {
+                if (!node.Name.StartsWith("0x"))
+                    nameHash = Crc32.Compute(node.Name);
+                else
+                    nameHash = uint.Parse(node.Name, System.Globalization.NumberStyles.HexNumber);
+                
+                if(node.ChildNodes.Count > 0)
+                {
+                    foreach(XmlNode child in node.ChildNodes)
+                    {
+                        Node newChild = new Node();
+                        newChild.fromXmlNode(child);
+                        Children.Add(newChild);
+                    }
+                }
+                else
+                {
+                    nodeType = (type)Enum.Parse(typeof(type), ((XmlElement)node).GetAttribute("type"));
+                    string value = node.Value;
+                    if (nodeType != type.String)
+                        value = value.Trim(" ".ToCharArray());
+                    /*nintendo*/switch (nodeType)
+                    {
+                        case type.Boolean:
+                            Value = int.Parse(value);
+                            break;
+                        case type.Float:
+                            Value = float.Parse(value);
+                            break;
+                        case type.Int:
+                            Value = int.Parse(value);
+                            break;
+                        case type.String:
+                            Value = value;
+                            break;
+                        case type.Vector2:
+                            string[] vector2 = value.Split(' ');
+                            Value = new float[2] { float.Parse(vector2[0]), float.Parse(vector2[1]) };
+                            break;
+                        case type.Vector3:
+                            string[] vector3 = value.Split(' ');
+                            Value = new float[3] { float.Parse(vector3[0]), float.Parse(vector3[1]), float.Parse(vector3[2]) };
+                            break;
+                        case type.Vector4:
+                            string[] vector4 = value.Split(' ');
+                            Value = new float[4] { float.Parse(vector4[0]), float.Parse(vector4[1]), float.Parse(vector4[2]), float.Parse(vector4[3]) };
+                            break;
+                    }
+                }
             }
         }
 
@@ -187,6 +242,15 @@ namespace AAMP2XML
             XmlDocument xml = new XmlDocument();
             xml.AppendChild(RootNode.ToXmlElement(xml));
             return xml;
+        }
+
+        public static AAMP fromXML(XmlDocument xml)
+        {
+            AAMP newAAMP = new AAMP();
+            Node root = new Node();
+            root.fromXmlNode(xml.ChildNodes[0]);
+            newAAMP.RootNode = root;
+            return newAAMP;
         }
 
         public static Dictionary<uint, string> hashName = new Dictionary<uint, string>();
