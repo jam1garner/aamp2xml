@@ -237,6 +237,186 @@ namespace AAMP2XML
             }
         }
 
+        private int getDataSize(Node n)
+        {
+            if(n.Children.Count > 0)
+            {
+                int size = 0;
+                foreach (Node child in n.Children)
+                    size += getDataSize(child);
+                return size;
+            }
+            else
+            {
+                /*nintendo*/switch(n.nodeType)
+                {
+                    case Node.type.Boolean:
+                    case Node.type.Float:
+                    case Node.type.Int:
+                        return 4;
+                    case Node.type.Vector2:
+                        return 8;
+                    case Node.type.Vector3:
+                        return 0xC;
+                    case Node.type.Vector4:
+                        return 0x10;
+                    case Node.type.String:
+                    default:
+                        return 0;
+                }
+            }
+        }
+
+        private int getStringSize(Node n)
+        {
+            if (n.Children.Count > 0)
+            {
+                int size = 0;
+                foreach (Node child in n.Children)
+                    size += getDataSize(child);
+                return size;
+            }
+            else
+            {
+                /*nintendo*/switch (n.nodeType)
+                {
+                    case Node.type.String:
+                        int size = ((string)n.Value).Length;
+                        do
+                            size++;
+                        while (size % 4 != 0);
+                        return size;
+                    case Node.type.Boolean:
+                    case Node.type.Float:
+                    case Node.type.Int:
+                    case Node.type.Vector2:
+                    case Node.type.Vector3:
+                    case Node.type.Vector4:
+                    default:
+                        return 0;
+                }
+            }
+        }
+
+        private int getChildNodeCount(Node n)
+        {
+            int childCount = n.Children.Count;
+            foreach (Node child in n.Children)
+                childCount += getChildNodeCount(child);
+            return childCount;
+        }
+
+        private void WriteChildren(Node node, FileOutput f, FileOutput dataBuffer, FileOutput stringBuffer, int dataBufferOffset, int stringBufferOffset)
+        {
+            //Write this node's children
+            int childNodeOffset = 0;
+            foreach (Node child in node.Children)
+            {
+                int offset;
+                if(child.Children.Count > 0)
+                {
+                    offset = childNodeOffset;
+                    childNodeOffset += child.Children.Count * 8;
+                }
+                else
+                {
+                    /*nintendo*/switch (child.nodeType)
+                    {
+                        case Node.type.String:
+                            offset = stringBufferOffset;
+                            break;
+                        case Node.type.Boolean:
+                        case Node.type.Float:
+                        case Node.type.Int:
+                        case Node.type.Vector2:
+                        case Node.type.Vector3:
+                        case Node.type.Vector4:
+                        default:
+                            offset = dataBufferOffset;
+                            break;
+                    }
+                }
+                offset = (offset - f.pos()) / 4;
+                f.writeInt(child.nameHash);
+                f.writeInt(offset);
+
+                if(child.Children.Count == 0)
+                {
+                    //write either the data or strings
+                    /*nintendo*/switch (child.nodeType)
+                    {
+                        case Node.type.Boolean:
+                            if ((bool)child.Value)
+                                dataBuffer.writeInt(1);
+                            else
+                                dataBuffer.writeInt(0);
+                            break;
+                        case Node.type.Float:
+                            dataBuffer.writeFloat((float)child.Value);
+                            break;
+                        case Node.type.Int:
+                            dataBuffer.writeInt((int)child.Value);
+                            break;
+                        case Node.type.Vector2:
+                            dataBuffer.writeFloat(((float[])child.Value)[0]);
+                            dataBuffer.writeFloat(((float[])child.Value)[1]);
+                            break;
+                        case Node.type.Vector3:
+                            dataBuffer.writeFloat(((float[])child.Value)[0]);
+                            dataBuffer.writeFloat(((float[])child.Value)[1]);
+                            dataBuffer.writeFloat(((float[])child.Value)[2]);
+                            break;
+                        case Node.type.Vector4:
+                            dataBuffer.writeFloat(((float[])child.Value)[0]);
+                            dataBuffer.writeFloat(((float[])child.Value)[1]);
+                            dataBuffer.writeFloat(((float[])child.Value)[2]);
+                            dataBuffer.writeFloat(((float[])child.Value)[3]);
+                            break;
+                        case Node.type.String:
+                            stringBuffer.writeString((string)child.Value);
+                            do
+                                stringBuffer.writeByte(0);
+                            while (stringBuffer.pos() % 4 != 0);
+                            break;
+                    }
+                    dataBufferOffset += getDataSize(child);
+                    stringBufferOffset += getStringSize(child);
+                }
+            }
+            //Write the grandchildren (assuming they exist)
+            foreach (Node child in node.Children)
+                WriteChildren(child, f, dataBuffer, stringBuffer, dataBufferOffset, stringBufferOffset);
+        }
+
+        public byte[] Rebuild()
+        {
+            FileOutput f = new FileOutput(), dataBuffer = new FileOutput(), stringBuffer = new FileOutput();
+            f.Endian = Endianness.Little;
+            f.writeString("AAMP");
+            f.writeInt(2);
+            f.writeInt(3);
+            int dataSize = getDataSize(RootNode);
+            int stringSize = getStringSize(RootNode);
+            int nodeCount = getChildNodeCount(RootNode);
+            f.writeInt(0x40 + (nodeCount * 8) + dataSize + stringSize);//Filesize, will overwrite later
+            f.writeInt(0);
+            f.writeInt(4);
+            f.writeInt(1);
+            f.writeInt(2);
+            f.writeInt(9);
+            f.writeInt(0);//Data buffer size. will overwrite later
+            f.writeInt(0);//String buffer size. will overwrite later
+            f.writeInt(0);
+            f.writeString("xml");
+            f.writeByte(0);
+            f.writeInt(RootNode.nameHash);
+            f.writeInt(3);
+            f.writeShort(3);
+            f.writeShort(RootNode.Children.Count);
+            WriteChildren(RootNode, f, dataBuffer, stringBuffer, 0x40 + (nodeCount * 8), 0x40 + (nodeCount * 8) + dataSize);
+            return f.getBytes();
+        }
+
         public XmlDocument ToXML()
         {
             XmlDocument xml = new XmlDocument();

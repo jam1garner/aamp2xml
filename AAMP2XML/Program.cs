@@ -19,7 +19,7 @@ namespace AAMP2XML
                 XmlDocument xml = new XmlDocument();
                 xml.Load(args[0]);
                 AAMP aamp = AAMP.fromXML(xml);
-                //aamp.Rebuild(); todo - write aamp rebuilding
+                File.WriteAllBytes(saveName, aamp.Rebuild());
             }
             else
             {

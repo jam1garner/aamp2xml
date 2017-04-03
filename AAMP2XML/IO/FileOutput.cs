@@ -48,7 +48,7 @@ namespace AAMP2XML
                 data.Add((byte)c[i]);
         }
 
-		public void writeInt(int i){
+		public void writeInt(long i){
             if(Endian == Endianness.Little){
 				data.Add((byte)((i)&0xFF));
 				data.Add((byte)((i>>8)&0xFF));
