@@ -36,7 +36,8 @@ namespace AAMP2XML
                 Vector3 = 0x4,
 
                 Vector4 = 0x6,
-                String = 0x7
+                String = 0x7,
+                Actor = 0x8
             }
 
             public type nodeType;
@@ -75,6 +76,7 @@ namespace AAMP2XML
                         case type.Float:
                             Value = f.readFloat();
                             break;
+                        case type.Actor:
                         case type.String:
                             Value = f.readString();
                             break;
@@ -97,7 +99,12 @@ namespace AAMP2XML
 
             public XmlElement ToXmlElement(XmlDocument doc)
             {
-                XmlElement node = doc.CreateElement(name);
+                string nodeName = name;
+                if (name == null)
+                    nodeName = "UnknownName";
+                XmlElement node = doc.CreateElement(nodeName);
+                if (name == null)
+                    node.SetAttribute("hash", "0x" + nameHash.ToString("X"));
                 if (Children.Count == 0)
                 {
                     node.SetAttribute("type", nodeType.ToString());
@@ -110,6 +117,7 @@ namespace AAMP2XML
                         case type.Float:
                             value = Value.ToString();
                             break;
+                        case type.Actor:
                         case type.String:
                             value = Value.ToString();
                             break;
@@ -143,16 +151,16 @@ namespace AAMP2XML
                 return node;
             }
 
-            public void fromXmlNode(XmlNode node)
+            public void fromXmlNode(XmlElement node)
             {
-                if (!node.Name.StartsWith("0x"))
+                if (node.Attributes == null || node.Attributes["hash"] == null)
                     nameHash = Crc32.Compute(node.Name);
                 else
-                    nameHash = uint.Parse(node.Name, System.Globalization.NumberStyles.HexNumber);
+                    nameHash = uint.Parse(node.Attributes["hash"].Value, System.Globalization.NumberStyles.HexNumber);
                 
                 if(node.ChildNodes.Count > 0)
                 {
-                    foreach(XmlNode child in node.ChildNodes)
+                    foreach(XmlElement child in node.ChildNodes)
                     {
                         Node newChild = new Node();
                         newChild.fromXmlNode(child);
@@ -161,9 +169,9 @@ namespace AAMP2XML
                 }
                 else
                 {
-                    nodeType = (type)Enum.Parse(typeof(type), ((XmlElement)node).GetAttribute("type"));
+                    nodeType = (type)Enum.Parse(typeof(type), node.GetAttribute("type"));
                     string value = node.Value;
-                    if (nodeType != type.String)
+                    if (nodeType != type.String && nodeType != type.Actor)
                         value = value.Trim(" ".ToCharArray());
                     /*nintendo*/switch (nodeType)
                     {
@@ -176,6 +184,7 @@ namespace AAMP2XML
                         case type.Int:
                             Value = int.Parse(value);
                             break;
+                        case type.Actor:
                         case type.String:
                             Value = value;
                             break;
@@ -260,6 +269,7 @@ namespace AAMP2XML
                         return 0xC;
                     case Node.type.Vector4:
                         return 0x10;
+                    case Node.type.Actor:
                     case Node.type.String:
                     default:
                         return 0;
@@ -280,6 +290,7 @@ namespace AAMP2XML
             {
                 /*nintendo*/switch (n.nodeType)
                 {
+                    case Node.type.Actor:
                     case Node.type.String:
                         int size = ((string)n.Value).Length;
                         do
@@ -322,6 +333,7 @@ namespace AAMP2XML
                 {
                     /*nintendo*/switch (child.nodeType)
                     {
+                        case Node.type.Actor:
                         case Node.type.String:
                             offset = stringBufferOffset;
                             break;
@@ -372,6 +384,7 @@ namespace AAMP2XML
                             dataBuffer.writeFloat(((float[])child.Value)[2]);
                             dataBuffer.writeFloat(((float[])child.Value)[3]);
                             break;
+                        case Node.type.Actor:
                         case Node.type.String:
                             stringBuffer.writeString((string)child.Value);
                             do
@@ -450,10 +463,7 @@ namespace AAMP2XML
                 GenerateHashes();
             string name = null;
             hashName.TryGetValue(hash, out name);
-            if (name == null)
-                return "0x" + hash.ToString("X");
-            else
-                return name; 
+            return name; 
         }
     }
 }
