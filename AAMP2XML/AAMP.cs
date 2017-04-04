@@ -158,31 +158,31 @@ namespace AAMP2XML
                 else
                     nameHash = uint.Parse(node.Attributes["hash"].Value, System.Globalization.NumberStyles.HexNumber);
                 
-                if(node.ChildNodes.Count > 0)
+                if(node.ChildNodes.Count > 0 && node.FirstChild.NodeType == XmlNodeType.Element)
                 {
-                    foreach(XmlElement child in node.ChildNodes)
+                    foreach(XmlNode child in node.ChildNodes)
                     {
                         Node newChild = new Node();
-                        newChild.fromXmlNode(child);
+                        newChild.fromXmlNode((XmlElement)child);
                         Children.Add(newChild);
                     }
                 }
                 else
                 {
                     nodeType = (type)Enum.Parse(typeof(type), node.GetAttribute("type"));
-                    string value = node.Value;
+                    string value = node.InnerText;
                     if (nodeType != type.String && nodeType != type.Actor)
                         value = value.Trim(" ".ToCharArray());
                     /*nintendo*/switch (nodeType)
                     {
                         case type.Boolean:
-                            Value = int.Parse(value);
+                            Value = (int.Parse(value)!=0);
                             break;
                         case type.Float:
                             Value = float.Parse(value);
                             break;
                         case type.Int:
-                            Value = int.Parse(value);
+                            Value = uint.Parse(value);
                             break;
                         case type.Actor:
                         case type.String:
@@ -283,7 +283,7 @@ namespace AAMP2XML
             {
                 int size = 0;
                 foreach (Node child in n.Children)
-                    size += getDataSize(child);
+                    size += getStringSize(child);
                 return size;
             }
             else
@@ -317,10 +317,15 @@ namespace AAMP2XML
             return childCount;
         }
 
-        private void WriteChildren(Node node, FileOutput f, FileOutput dataBuffer, FileOutput stringBuffer, int dataBufferOffset, int stringBufferOffset)
+        private int getGrandChildNodeCount(Node n)
+        {
+            return getChildNodeCount(n) - n.Children.Count;
+        }
+
+        private void WriteChildren(Node node, FileOutput f, FileOutput dataBuffer, FileOutput stringBuffer, ref int dataBufferOffset, ref int stringBufferOffset)
         {
             //Write this node's children
-            int childNodeOffset = 0;
+            int childNodeOffset = f.pos() + (node.Children.Count*8);
             foreach (Node child in node.Children)
             {
                 int offset;
@@ -350,7 +355,9 @@ namespace AAMP2XML
                 }
                 offset = (offset - f.pos()) / 4;
                 f.writeInt(child.nameHash);
-                f.writeInt(offset);
+                f.writeShort(offset);
+                f.writeByte(child.Children.Count);
+                f.writeByte((byte)child.nodeType);
 
                 if(child.Children.Count == 0)
                 {
@@ -367,7 +374,7 @@ namespace AAMP2XML
                             dataBuffer.writeFloat((float)child.Value);
                             break;
                         case Node.type.Int:
-                            dataBuffer.writeInt((int)child.Value);
+                            dataBuffer.writeInt((uint)child.Value);
                             break;
                         case Node.type.Vector2:
                             dataBuffer.writeFloat(((float[])child.Value)[0]);
@@ -398,27 +405,29 @@ namespace AAMP2XML
             }
             //Write the grandchildren (assuming they exist)
             foreach (Node child in node.Children)
-                WriteChildren(child, f, dataBuffer, stringBuffer, dataBufferOffset, stringBufferOffset);
+                WriteChildren(child, f, dataBuffer, stringBuffer, ref dataBufferOffset, ref stringBufferOffset);
         }
 
         public byte[] Rebuild()
         {
             FileOutput f = new FileOutput(), dataBuffer = new FileOutput(), stringBuffer = new FileOutput();
             f.Endian = Endianness.Little;
+            dataBuffer.Endian = Endianness.Little;
             f.writeString("AAMP");
             f.writeInt(2);
             f.writeInt(3);
             int dataSize = getDataSize(RootNode);
             int stringSize = getStringSize(RootNode);
             int nodeCount = getChildNodeCount(RootNode);
+            int nonDirectChildCount = getGrandChildNodeCount(RootNode);
             f.writeInt(0x40 + (nodeCount * 8) + dataSize + stringSize);//Filesize, will overwrite later
             f.writeInt(0);
             f.writeInt(4);
             f.writeInt(1);
-            f.writeInt(2);
-            f.writeInt(9);
-            f.writeInt(0);//Data buffer size. will overwrite later
-            f.writeInt(0);//String buffer size. will overwrite later
+            f.writeInt(nodeCount - nonDirectChildCount);
+            f.writeInt(nonDirectChildCount);
+            f.writeInt(dataSize);//Data buffer size. will overwrite later
+            f.writeInt(stringSize);//String buffer size. will overwrite later
             f.writeInt(0);
             f.writeString("xml");
             f.writeByte(0);
@@ -426,7 +435,11 @@ namespace AAMP2XML
             f.writeInt(3);
             f.writeShort(3);
             f.writeShort(RootNode.Children.Count);
-            WriteChildren(RootNode, f, dataBuffer, stringBuffer, 0x40 + (nodeCount * 8), 0x40 + (nodeCount * 8) + dataSize);
+            int dataBufferPos = 0x40 + (nodeCount * 8);
+            int stringBufferPos = dataBufferPos + dataSize;
+            WriteChildren(RootNode, f, dataBuffer, stringBuffer, ref dataBufferPos, ref stringBufferPos);
+            f.writeBytes(dataBuffer.getBytes());
+            f.writeBytes(stringBuffer.getBytes());
             return f.getBytes();
         }
 
@@ -441,7 +454,7 @@ namespace AAMP2XML
         {
             AAMP newAAMP = new AAMP();
             Node root = new Node();
-            root.fromXmlNode(xml.ChildNodes[0]);
+            root.fromXmlNode((XmlElement)xml.LastChild);
             newAAMP.RootNode = root;
             return newAAMP;
         }
