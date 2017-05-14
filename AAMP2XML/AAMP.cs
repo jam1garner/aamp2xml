@@ -37,6 +37,7 @@ namespace AAMP2XML
 
                 Vector4 = 0x6,
                 String = 0x7,
+                String2 = 0x14,
                 Actor = 0x8
             }
 
@@ -78,6 +79,7 @@ namespace AAMP2XML
                             break;
                         case type.Actor:
                         case type.String:
+                        case type.String2:
                             Value = f.readString();
                             break;
                         case type.Boolean:
@@ -119,6 +121,7 @@ namespace AAMP2XML
                             break;
                         case type.Actor:
                         case type.String:
+                        case type.String2:
                             value = Value.ToString();
                             break;
                         case type.Boolean:
@@ -171,7 +174,7 @@ namespace AAMP2XML
                 {
                     nodeType = (type)Enum.Parse(typeof(type), node.GetAttribute("type"));
                     string value = node.InnerText;
-                    if (nodeType != type.String && nodeType != type.Actor)
+                    if (nodeType != type.String && nodeType != type.String2 && nodeType != type.Actor)
                         value = value.Trim(" ".ToCharArray());
                     /*nintendo*/switch (nodeType)
                     {
@@ -186,6 +189,7 @@ namespace AAMP2XML
                             break;
                         case type.Actor:
                         case type.String:
+                        case type.String2:
                             Value = value;
                             break;
                         case type.Vector2:
@@ -271,6 +275,7 @@ namespace AAMP2XML
                         return 0x10;
                     case Node.type.Actor:
                     case Node.type.String:
+                    case Node.type.String2:
                     default:
                         return 0;
                 }
@@ -292,6 +297,7 @@ namespace AAMP2XML
                 {
                     case Node.type.Actor:
                     case Node.type.String:
+                    case Node.type.String2:
                         int size = ((string)n.Value).Length;
                         do
                             size++;
@@ -340,6 +346,7 @@ namespace AAMP2XML
                     {
                         case Node.type.Actor:
                         case Node.type.String:
+                        case Node.type.String2:
                             offset = stringBufferOffset;
                             break;
                         case Node.type.Boolean:
@@ -393,6 +400,7 @@ namespace AAMP2XML
                             break;
                         case Node.type.Actor:
                         case Node.type.String:
+                        case Node.type.String2:
                             stringBuffer.writeString((string)child.Value);
                             do
                                 stringBuffer.writeByte(0);
